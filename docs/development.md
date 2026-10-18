@@ -5,6 +5,7 @@ Install Python 3.10+ with Tk, then:
 ```sh
 python -m pip install -r requirements-desktop.txt -e . build twine ruff pip-audit
 python -m unittest discover -s tests -v
+python -m unittest discover -s firmware -p 'test_*.py' -v
 python -m ruff check canon_webcam tests packaging
 python -m canon_webcam.gui --self-test --report self-test.json
 python -m build

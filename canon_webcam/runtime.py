@@ -158,7 +158,9 @@ class CaptureController:
         for thread in self._threads:
             thread.join(timeout=6)
         if any(t.is_alive() for t in self._threads):
-            self._set(state='error', error='Output did not stop within timeout; restart the application')
+            message = 'Capture/output did not stop within timeout; retry Stop or restart the application'
+            self._set(state='error', error=message)
+            raise RuntimeError(message)
         elif self.snapshot()['state'] != 'error':
             self._set(state='stopped')
 

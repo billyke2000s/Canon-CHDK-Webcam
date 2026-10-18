@@ -1,0 +1,97 @@
+name: Experimental Windows native virtual camera
+
+# Separate from portable build/test gating until native CI has succeeded.
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'canon_webcam/media.py'
+      - 'packaging/virtualcam_smoke.py'
+      - '.github/workflows/virtualcam.yml'
+      - 'pyproject.toml'
+
+permissions:
+  contents: read
+
+jobs:
+  obs-native:
+    runs-on: windows-2022
+    timeout-minutes: 20
+    env:
+      OBS_VERSION: '32.1.0'
+      # Official obsproject/obs-studio GitHub release asset digest retrieved
+      # from /repos/obsproject/obs-studio/releases/tags/32.1.0. No mutable latest.
+      OBS_SHA256: '7c742f250dc1355ca4a7ccfbcd07a1b63f53ea46f4e052bce2426d8d324ee90d'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          architecture: x64
+      - name: Install host media and native OBS backend
+        run: python -m pip install -e ".[media,webcam]"
+      - name: Register pinned official OBS virtual camera on ephemeral CI runner only
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if ($env:GITHUB_ACTIONS -ne 'true' -or $env:RUNNER_ENVIRONMENT -ne 'github-hosted') {
+            throw 'OBS component registration is permitted only on ephemeral GitHub-hosted CI runners'
+          }
+          $archive = Join-Path $env:RUNNER_TEMP 'obs-pinned.zip'
+          $target = Join-Path $env:RUNNER_TEMP 'obs-pinned'
+          $url = "https://github.com/obsproject/obs-studio/releases/download/$env:OBS_VERSION/OBS-Studio-$env:OBS_VERSION-Windows-x64.zip"
+          Invoke-WebRequest -Uri $url -OutFile $archive -MaximumRetryCount 3 -RetryIntervalSec 3
+          $actual = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+          if ($actual -ne $env:OBS_SHA256) { throw "Official OBS archive digest mismatch: $actual" }
+          Expand-Archive -LiteralPath $archive -DestinationPath $target -Force
+          $dlls = @(Get-ChildItem -LiteralPath $target -Recurse -Filter 'obs-virtualcam-module64.dll')
+          if ($dlls.Count -ne 1) { throw "Expected exactly one official 64-bit virtual camera module; found $($dlls.Count)" }
+          $dll = $dlls[0].FullName
+          $signature = Get-AuthenticodeSignature -LiteralPath $dll
+          # Some official component DLLs may be unsigned. The exact publisher
+          # archive hash above is mandatory; record signing evidence separately.
+          if ($signature.Status -eq 'HashMismatch') { throw 'OBS module Authenticode hash mismatch' }
+          # Same registration API as pyvirtualcam's upstream Windows CI script:
+          # https://github.com/letmaik/pyvirtualcam/blob/main/.github/scripts/install-windows-obs-virtual-cam.ps1
+          # Only the camera DLL is registered. OBS itself is never launched.
+          $process = Start-Process -FilePath "$env:WINDIR\System32\regsvr32.exe" -ArgumentList "/n /i:1 /s `"$dll`"" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { throw "Virtual camera registration failed: $($process.ExitCode)" }
+          "OBS_DLL=$dll" | Out-File -FilePath $env:GITHUB_ENV -Append -Encoding utf8
+          @{
+            source = $url
+            archive_sha256 = $actual
+            module_sha256 = (Get-FileHash -Algorithm SHA256 -LiteralPath $dll).Hash
+            signature = $signature.Status.ToString()
+            signer = $signature.SignerCertificate.Subject
+            registration_exit_code = $process.ExitCode
+          } | ConvertTo-Json | Set-Content -Path 'obs-provenance.json'
+      - name: Send synthetic frames using real OBS backend and independently receive if supported
+        run: python packaging/virtualcam_smoke.py --report virtualcam-report.json
+      - name: Describe actual validation level
+        if: always()
+        shell: pwsh
+        run: |
+          '## Experimental native virtual camera validation' >> $env:GITHUB_STEP_SUMMARY
+          if (Test-Path 'virtualcam-report.json') {
+            $report = Get-Content 'virtualcam-report.json' | ConvertFrom-Json
+            "Validation level: **$($report.validation_level)**" >> $env:GITHUB_STEP_SUMMARY
+            "Native send verified: $($report.native_send_verified); independent receive verified: $($report.receive_verified)." >> $env:GITHUB_STEP_SUMMARY
+          } else {
+            'No native send/receive result: installation or setup failed before the test.' >> $env:GITHUB_STEP_SUMMARY
+          }
+          'Synthetic frames only. This does not validate Canon USB capture or Discord/Teams/Zoom/browser compatibility.' >> $env:GITHUB_STEP_SUMMARY
+      - name: Unregister CI-only OBS component
+        if: always() && env.OBS_DLL != ''
+        shell: pwsh
+        run: |
+          $process = Start-Process -FilePath "$env:WINDIR\System32\regsvr32.exe" -ArgumentList "/u /n /i:1 /s `"$env:OBS_DLL`"" -Wait -PassThru
+          if ($process.ExitCode -ne 0) { Write-Warning "Unregister returned $($process.ExitCode); ephemeral runner will be discarded" }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: native-virtualcam-evidence
+          path: |
+            virtualcam-report.json
+            obs-provenance.json
+          if-no-files-found: warn

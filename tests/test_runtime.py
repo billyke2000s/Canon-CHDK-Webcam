@@ -1,5 +1,6 @@
 import time
 import unittest
+from unittest.mock import Mock
 from canon_webcam.runtime import CaptureController, CaptureOptions, SimulatedSource
 
 
@@ -69,8 +70,57 @@ class RuntimeTests(unittest.TestCase):
         c.stop()
         self.assertTrue(SlowRecorder.closed)
 
+    def test_shutdown_timeout_prevents_silent_success(self):
+        c = CaptureController(CaptureOptions())
+        worker = Mock()
+        worker.is_alive.return_value = True
+        c._threads = [worker]
+        with self.assertRaisesRegex(RuntimeError, 'did not stop'):
+            c.stop()
+        self.assertEqual(c.snapshot()['state'], 'error')
+        worker.join.assert_called_once_with(timeout=6)
+        with self.assertRaisesRegex(RuntimeError, 'already running'):
+            c.start()
+
     def test_invalid_config(self):
         for config in [CaptureOptions(fps=60), CaptureOptions(buffer_size=0),
                        CaptureOptions(bitrate=61), CaptureOptions(mode='native')]:
             with self.assertRaises(ValueError):
                 CaptureController(config)
+
+
+class GUIShutdownTests(unittest.TestCase):
+    def test_failed_stop_retains_controller_and_blocks_restart(self):
+        import queue
+        from unittest.mock import patch
+        from canon_webcam.gui import WebcamApp
+        from canon_webcam.settings import AppSettings
+        app = WebcamApp.__new__(WebcamApp)
+        controller = Mock()
+        controller.stop.side_effect = RuntimeError('worker still running')
+        controller.snapshot.return_value = {'state': 'error', 'error': 'worker still running'}
+        controller.poll_frame.return_value = None
+        app.controller = controller
+        app.busy = False
+        app.closing = False
+        app.events = queue.SimpleQueue()
+        app.stop_button = Mock()
+        app.status = Mock()
+        app.notice = Mock()
+        app.stats = Mock()
+        app.root = Mock()
+        app.settings = AppSettings()
+        app._set_active = Mock()
+        def immediate(**kwargs):
+            thread = Mock()
+            thread.start.side_effect = kwargs['target']
+            return thread
+        with patch('canon_webcam.gui.threading.Thread', side_effect=immediate):
+            app._stop()
+        app._poll()
+        self.assertIs(app.controller, controller)
+        app._set_active.assert_not_called()
+        app.stop_button.configure.assert_called_with(state='normal')
+        # Start explicitly refuses to allocate another controller.
+        app._start()
+        self.assertIs(app.controller, controller)

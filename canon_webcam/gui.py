@@ -27,7 +27,7 @@ class WebcamApp:
             self.settings = AppSettings()
             settings_error = str(exc)
         root.title("Canon CHDK Webcam · Experimental")
-        root.geometry("1080x760")
+        root.geometry(f"{min(1080, root.winfo_screenwidth() - 60)}x{min(760, root.winfo_screenheight() - 110)}")
         root.minsize(900, 660)
         root.configure(bg="#10151e")
         self._style()
@@ -64,11 +64,15 @@ class WebcamApp:
         body.rowconfigure(0, weight=1)
         sidebar = ttk.Frame(body)
         sidebar.grid(row=0, column=0, sticky="ns", padx=(0, 14))
+        sidebar.rowconfigure(0, weight=1)
+        sidebar.columnconfigure(0, weight=1)
         settings_canvas = tk.Canvas(sidebar, width=288, bg="#10151e", highlightthickness=0)
         scrollbar = ttk.Scrollbar(sidebar, orient="vertical", command=settings_canvas.yview)
         settings_canvas.configure(yscrollcommand=scrollbar.set)
-        scrollbar.pack(side="right", fill="y")
-        settings_canvas.pack(side="left", fill="y", expand=True)
+        scrollbar.grid(row=0, column=1, sticky="ns")
+        settings_canvas.grid(row=0, column=0, sticky="nsew")
+        actions = ttk.Frame(sidebar)
+        actions.grid(row=1, column=0, columnspan=2, sticky="ew", pady=(10, 0))
         controls = ttk.Frame(settings_canvas, padding=(0, 0, 10, 0))
         settings_canvas.create_window((0, 0), window=controls, anchor="nw")
         controls.bind("<Configure>", lambda event: settings_canvas.configure(
@@ -129,9 +133,9 @@ class WebcamApp:
         file_button.pack(fill="x", pady=4)
         self.editable.append((file_button, "normal"))
         ttk.Label(controls, textvariable=self.file_label, wraplength=245, style="Muted.TLabel").pack(anchor="w")
-        self.start_button = ttk.Button(controls, text="Connect & start capture", command=self._start)
-        self.start_button.pack(fill="x", pady=(16, 5))
-        self.stop_button = ttk.Button(controls, text="Stop & disconnect", command=self._stop, state="disabled")
+        self.start_button = ttk.Button(actions, text="Connect & start capture", command=self._start)
+        self.start_button.pack(fill="x", pady=(0, 5))
+        self.stop_button = ttk.Button(actions, text="Stop & disconnect", command=self._stop, state="disabled")
         self.stop_button.pack(fill="x")
         self.status = tk.StringVar(value="Disconnected")
         ttk.Label(preview, textvariable=self.status, font=("Segoe UI", 14, "bold")).pack(anchor="w", pady=(0, 8))
@@ -223,7 +227,6 @@ class WebcamApp:
             return
         self.busy = True
         controller = self.controller
-        self.controller = None
         self.stop_button.configure(state="disabled")
         self.status.set("Disconnecting…")
         def run():
@@ -231,7 +234,7 @@ class WebcamApp:
                 controller.stop()
                 self.events.put(("stopped", None))
             except Exception as exc:
-                self.events.put(("error", str(exc)))
+                self.events.put(("stop_failed", str(exc)))
         threading.Thread(target=run, daemon=True, name="gui-disconnect").start()
 
     def _poll(self):
@@ -247,7 +250,18 @@ class WebcamApp:
                                 "USB viewport capture is experimental. Report problems with diagnostic logs.")
                 if self.closing:
                     self._stop()
+            elif kind == "stop_failed":
+                # Retain the controller and block a second capture while a native
+                # worker may still own USB, a file, or the virtual camera.
+                self.notice.set(str(value))
+                self.status.set("Shutdown incomplete")
+                self.stop_button.configure(state="normal")
+                if self.closing:
+                    self.root.destroy()
+                    return
             else:
+                if kind == "stopped":
+                    self.controller = None
                 self._set_active(False)
                 self.status.set("Disconnected" if kind == "stopped" else "Capture failed")
                 if kind == "error":

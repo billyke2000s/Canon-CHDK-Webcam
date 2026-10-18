@@ -17,6 +17,16 @@ USB bus/address changes. Without one, selection remains tied to its current USB
 address: explicit reselection may be necessary after unplugging. It never silently
 substitutes a different serial-numbered camera.
 
+## CHDK prerequisites
+
+Identify the exact firmware before selecting a build. The regional model is
+listed under [ELPH100 / IXUS115 / IXUS117](https://chdk.fandom.com/wiki/ELPH100).
+Follow the project's [installation instructions](https://chdk.fandom.com/wiki/Prepare_your_SD_card)
+for your card and firmware; retain a normal recovery card. Start with a known-good
+CHDK build and confirm the PTP connection with [CHDKPTP](https://app.assembla.com/spaces/chdkptp/wiki)
+if this application's experimental capture fails. Camera mode and USB driver
+requirements vary; the host does not execute camera mode-switching scripts.
+
 ## Windows setup
 
 Install the application's USB dependency extra (`pip install .[usb]` for source
@@ -87,7 +97,8 @@ PyUSB's maintained implementation and backend documentation are available at
 
 ## Verification
 
-Run `python -m unittest tests.test_ptp tests.test_usb -v`. Tests cover bounded
+Run `python -m unittest discover -s tests -p 'test_ptp.py' -v` and
+`python -m unittest discover -s tests -p 'test_usb.py' -v`. Tests cover bounded
 parsing, DeviceInfo truncation at every boundary, partial reads/writes, coalesced
 data/response containers, command numbering, session lifecycle, transaction
 mismatches, invalid response sizes, timeout poisoning, missing CHDK support,

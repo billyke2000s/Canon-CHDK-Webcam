@@ -11,6 +11,8 @@ Original commit `594bde6`: 20 tests, one failure. The MJPEG delimiter implementa
 - Real PyAV synthetic-image H.264/MJPEG roundtrip tests verify playable media, dimensions, frame counts and timestamp gaps.
 - Synthetic USB integration feeds fragmented PTP bytes through the real CHDK session, viewport decoder and video recorder.
 - One 60-second simulated 640×480/24 FPS H.264 recording: 1,428 acquired frames, about 23.8 FPS, zero capture queue drops, one encoding cadence drop; tracemalloc peak approximately 11.5 MB. Encoded bitrate about 7.4 Mbps despite a 30 Mbps target, illustrating that target bitrate is not a measured guarantee.
+- Five-minute simulated recording: 7,169 acquired frames, about 23.9 FPS, zero capture queue drops, one encoding cadence drop, approximately 11.5 MB tracemalloc peak. This is synthetic scheduling/encoding evidence, not USB throughput.
+- Windows Python 3.10/3.12 and Linux matrix passed at commit `497a16d`; frozen Windows executable passed real H.264/MJPEG simulation and rendered a working GUI preview. Screenshot/report are attached to that Actions run.
 - Mock OBS backend tests verify frame format, resizing and cleanup; no installed Windows camera device was used.
 - Isolated-container libusb can load its shared library but cannot initialize a physical USB bus. Simulation checks dynamic linkage; real-device enumeration requires a suitable host.
 
