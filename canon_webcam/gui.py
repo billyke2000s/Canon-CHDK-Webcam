@@ -308,10 +308,12 @@ def _media_self_test():
     # CI containers can have no USB bus even when the bundled DLL is correct.
     import ctypes
     import libusb_package
-    library = libusb_package.find_library("usb-1.0")
+    library = (libusb_package.get_library_path() or
+               libusb_package.find_library("libusb-1.0") or
+               libusb_package.find_library("usb-1.0"))
     if not library:
         raise RuntimeError("Bundled libusb library could not be located")
-    ctypes.CDLL(library)
+    ctypes.CDLL(str(library))
     reports = {}
     with tempfile.TemporaryDirectory(prefix="canon-webcam-smoke-") as directory:
         for codec in ("h264", "mjpeg"):
