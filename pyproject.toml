@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "canon-chdk-webcam"
+version = "0.1.0"
+description = "Experimental Canon IXUS 117 HS CHDK USB webcam host tooling"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+authors = [{name = "Canon CHDK Webcam contributors"}]
+
+[project.scripts]
+canon-webcam-config = "canon_webcam.cli:main"
+canon-webcam-simulate = "canon_webcam.simulator:main"
+canon-webcam-inspect = "canon_webcam.inspect:main"
+
+[tool.setuptools.packages.find]
+include = ["canon_webcam*"]
