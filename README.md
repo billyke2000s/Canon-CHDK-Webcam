@@ -13,8 +13,8 @@ Experimental Windows webcam bridge for **Canon IXUS 117 HS / PowerShot ELPH 100 
 | YUV8/YUV8B/YUV8C, padding, margins, display aspect, rotation | Implemented NumPy conversion | Synthetic/reference comparison |
 | H.264/MJPEG host recording, bitrate 2–60 Mbps, selectable output size/FPS | Implemented PyAV/FFmpeg | Real local encode/decode tests on synthetic images |
 | Hardware host encoders | Explicit NVENC/QSV/AMF preference with software fallback | Unavailable-encoder fallback tested; GPU validation pending |
-| Windows virtual webcam | pyvirtualcam OBS backend adapter | Mock sink tested; actual Windows applications pending |
-| GUI, preview, preferences, diagnostics | Implemented Tk/Pillow | Headless application smoke; desktop validation tracked in CI |
+| Windows virtual webcam | pyvirtualcam OBS backend adapter | Native OBS send + independent DirectShow receive passed on Windows CI; target apps pending |
+| GUI, preview, preferences, diagnostics | Implemented Tk/Pillow | Headless codec smoke and frozen Windows GUI preview passed |
 | Windows portable packaging | PyInstaller and Windows Actions workflow | Check latest Actions results before download |
 | Native camera H.264/MJPEG over USB | **Not implemented** | No evidence of working extraction |
 | Firmware research / compatibility gates | Offline source inventory and gated plan | No camera patch or permanent firmware modification |

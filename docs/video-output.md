@@ -21,8 +21,9 @@ browser's camera picker. Grant the browser camera permission where required.
 The application uses pyvirtualcam to feed the OBS device directly. Do not also
 start OBS's own virtual camera producer at the same time. This integration does
 not install a new driver or claim to implement a native Media Foundation camera.
-Its contract is covered by mocked tests; real Windows application compatibility
-still needs validation. An unavailable backend produces an actionable error
+Its contract is covered by mocked tests and a separate Windows native OBS
+send/DirectShow receive CI test using synthetic frames. Conferencing application
+compatibility still needs validation. An unavailable backend produces an actionable error
 rather than silently substituting a camera.
 
 ## Recording
@@ -96,8 +97,13 @@ pacing and shutdown.
 Automated tests encode and decode synthetic H.264 and MJPEG files using real PyAV,
 check decoded dimensions and approximate color, preserve timestamp gaps, exercise
 hardware-initialization fallback and cleanup, and verify the pyvirtualcam API with
-a mocked OBS device. These tests do not validate camera USB capture, native Canon
-video extraction, physical GPU encoders or a real Windows virtual-camera device.
+a mocked OBS device. The separate `Experimental Windows native virtual camera` workflow installs
+a hash-pinned official OBS component on an ephemeral runner and exercises real
+native sending, independent DirectShow reception when supported, content checks
+and device reopening. The recorded validation level distinguishes actual receive
+verification from sender-only operation. These checks do not validate Canon USB
+capture, native Canon video extraction, physical GPU encoders or conferencing
+application compatibility.
 
 On Windows, verify preview and source dimensions first, then run OBS Virtual
 Camera through each target application for at least 30 minutes. Check connection
