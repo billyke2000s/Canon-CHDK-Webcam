@@ -7,6 +7,8 @@ diagnostics; production capture should also validate decode and frame size.
 
 class MjpegDecoder:
     def __init__(self, max_frame_bytes=8 * 1024 * 1024):
+        if max_frame_bytes < 4:
+            raise ValueError("JPEG frame limit must be at least 4 bytes")
         self.buffer = bytearray()
         self.max_frame_bytes = max_frame_bytes
 
@@ -14,13 +16,13 @@ class MjpegDecoder:
         self.buffer.extend(data)
         frames = []
         while True:
-            start = self.buffer.find(b"\\xff\\xd8")
+            start = self.buffer.find(b"\xff\xd8")
             if start < 0:
-                self.buffer[:] = self.buffer[-1:] if self.buffer.endswith(b"\\xff") else b""
+                self.buffer[:] = self.buffer[-1:] if self.buffer.endswith(b"\xff") else b""
                 break
             if start:
                 del self.buffer[:start]
-            end = self.buffer.find(b"\\xff\\xd9", 2)
+            end = self.buffer.find(b"\xff\xd9", 2)
             if end < 0:
                 if len(self.buffer) > self.max_frame_bytes:
                     self.buffer.clear()

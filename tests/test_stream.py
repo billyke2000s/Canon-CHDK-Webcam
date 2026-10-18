@@ -35,7 +35,7 @@ class PacketTests(unittest.TestCase):
 
 class MjpegTests(unittest.TestCase):
     def test_fragmented_frames_and_garbage(self):
-        jpeg = b"\\xff\\xd8data\\xff\\xd9"
+        jpeg = b"\xff\xd8data\xff\xd9"
         d = MjpegDecoder()
         self.assertEqual(d.feed(b"garbage" + jpeg[:4]), [])
         self.assertEqual(d.feed(jpeg[4:] + jpeg), [jpeg, jpeg])
@@ -43,7 +43,7 @@ class MjpegTests(unittest.TestCase):
     def test_limit(self):
         d = MjpegDecoder(max_frame_bytes=5)
         with self.assertRaises(ValueError):
-            d.feed(b"\\xff\\xd8longer")
+            d.feed(b"\xff\xd8longer")
 
 
 if __name__ == "__main__":

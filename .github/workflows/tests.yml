@@ -1,13 +1,145 @@
-name: Python tests
+name: Test, package, and experimental release
 on:
   push:
   pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ['3.10', '3.12']
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+          cache: pip
+          cache-dependency-path: requirements-desktop.txt
+      - run: python -m pip install -r requirements-desktop.txt -e . ruff
+      - run: python -m pip check
+      - run: python -m ruff check canon_webcam tests packaging
+      - run: python -m unittest discover -s tests -v
+      - run: python -m unittest discover -s firmware -p 'test_*.py' -v
+      - run: python -m canon_webcam.gui --self-test --report self-test.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: simulation-${{ matrix.os }}-${{ matrix.python }}
+          path: self-test.json
+          if-no-files-found: warn
+
+  validate:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
-      - run: python -m unittest discover -s tests -v
+      - run: python -m pip install build twine pip-audit
+      - run: python -m build
+      - run: python -m twine check dist/*
+      - run: python -m pip_audit -r requirements-desktop.txt --progress-spinner off
+      - uses: actions/upload-artifact@v4
+        with:
+          name: python-distributions
+          path: dist/*
+          if-no-files-found: error
+
+  windows-portable:
+    needs: [test, validate]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+          cache: pip
+          cache-dependency-path: requirements-desktop.txt
+      - run: python -m pip install -r requirements-desktop.txt -e . pyinstaller==6.22.3
+      - run: python -m pip check
+      - run: python -m PyInstaller --noconfirm --clean packaging/windows.spec
+      - name: Smoke test frozen executable without a camera
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'dist/Canon-CHDK-Webcam/Canon-CHDK-Webcam.exe'
+          $process = Start-Process -FilePath $exe -ArgumentList '--self-test', '--report', 'frozen-self-test.json' -PassThru
+          if (-not $process.WaitForExit(60000)) {
+            $process.Kill()
+            throw 'Frozen synthetic self-test timed out'
+          }
+          if ($process.ExitCode -ne 0) { throw "Frozen self-test exit $($process.ExitCode)" }
+          if (-not (Test-Path 'frozen-self-test.json')) { throw 'No frozen self-test report' }
+          $report = Get-Content frozen-self-test.json -Raw | ConvertFrom-Json
+          if ($report.status -ne 'passed' -or $report.hardware_verified -ne $false) {
+            throw 'Frozen simulation did not pass or incorrectly claimed hardware verification'
+          }
+      - name: Smoke test frozen Windows GUI and save preview
+        shell: pwsh
+        run: |
+          $exe = Resolve-Path 'dist/Canon-CHDK-Webcam/Canon-CHDK-Webcam.exe'
+          $process = Start-Process -FilePath $exe -ArgumentList '--gui-smoke', '--report', 'gui-smoke.json', '--screenshot', 'gui-smoke.png' -PassThru
+          if (-not $process.WaitForExit(60000)) {
+            $process.Kill()
+            throw 'Frozen GUI smoke test timed out'
+          }
+          if ($process.ExitCode -ne 0) { throw "Frozen GUI smoke exit $($process.ExitCode)" }
+          if (-not (Test-Path 'gui-smoke.json')) { throw 'No GUI smoke report' }
+          $report = Get-Content gui-smoke.json -Raw | ConvertFrom-Json
+          if ($report.status -ne 'passed') { throw 'Frozen GUI smoke did not pass' }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: windows-gui-validation
+          path: |
+            frozen-self-test.json
+            gui-smoke.json
+            gui-smoke.png
+          if-no-files-found: warn
+      - name: Include documentation and third-party notices
+        shell: pwsh
+        run: |
+          Copy-Item README.md, LICENSE, packaging/PORTABLE-README.txt dist/Canon-CHDK-Webcam/
+          Copy-Item docs dist/Canon-CHDK-Webcam/docs -Recurse
+          Copy-Item frozen-self-test.json, gui-smoke.json, gui-smoke.png dist/Canon-CHDK-Webcam/
+          python packaging/collect_licenses.py dist/Canon-CHDK-Webcam
+          python -m pip freeze | Out-File -Encoding utf8 dist/Canon-CHDK-Webcam/build-dependencies.txt
+          Compress-Archive -Path dist/Canon-CHDK-Webcam -DestinationPath dist/Canon-CHDK-Webcam-windows-x64-experimental.zip
+          $hash = (Get-FileHash dist/Canon-CHDK-Webcam-windows-x64-experimental.zip -Algorithm SHA256).Hash.ToLowerInvariant()
+          "$hash  Canon-CHDK-Webcam-windows-x64-experimental.zip" | Out-File -Encoding ascii dist/SHA256SUM.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-x64-experimental
+          path: |
+            dist/Canon-CHDK-Webcam-windows-x64-experimental.zip
+            dist/SHA256SUM.txt
+          if-no-files-found: error
+
+  prerelease:
+    if: startsWith(github.ref, 'refs/tags/v') && github.event_name == 'push'
+    needs: [test, validate, windows-portable]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-x64-experimental
+          path: release
+      - name: Publish only as experimental prerelease
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: |
+          gh release create "$RELEASE_TAG" release/* --verify-tag --prerelease --title "$RELEASE_TAG — experimental viewport webcam" --notes 'Automated tests and frozen Windows simulation passed. Physical Canon USB compatibility is NOT verified. Native 1080p H.264 extraction is research. OBS virtual camera and a suitable Windows USB driver are separate prerequisites. Read included documentation before connecting hardware.'

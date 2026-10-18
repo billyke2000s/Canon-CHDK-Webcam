@@ -12,3 +12,9 @@ build/
 *.jpg
 *.jpeg
 .env
+.ruff_cache/
+*.mkv
+*.avi
+*.log
+*.zip
+self-test.json

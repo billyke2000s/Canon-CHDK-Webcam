@@ -13,7 +13,7 @@ def main():
     config = StreamConfig(args.codec, args.bitrate, width, height, args.fps).validate()
     print(f"Requested: {config.width}x{config.height}@{config.fps} {config.codec} {config.bitrate_mbps} Mbps")
     print(f"Video payload: {config.bytes_per_second / 1_000_000:.2f} MB/s (excludes USB overhead)")
-    print("NOTE: Configuration only. No USB connection or video streaming is implemented yet.")
+    print("NOTE: Configuration only. This command does not connect. Launch canon-webcam for preview, or python -m canon_webcam.benchmark for diagnostics.")
 
 
 if __name__ == "__main__":

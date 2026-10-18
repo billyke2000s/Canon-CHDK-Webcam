@@ -13,8 +13,8 @@ class StreamConfig:
     def validate(self):
         if self.codec not in ("h264", "mjpeg"):
             raise ValueError("codec must be h264 or mjpeg")
-        if not 1 <= self.bitrate_mbps <= 150:
-            raise ValueError("bitrate must be 1..150 Mbps")
+        if not 2 <= self.bitrate_mbps <= 60:
+            raise ValueError("bitrate must be 2..60 Mbps")
         if (self.width, self.height) not in ((1920, 1080), (1280, 720), (640, 480)):
             raise ValueError("unsupported requested resolution")
         if self.fps not in (24, 30):
