@@ -27,8 +27,8 @@ class WebcamApp:
             self.settings = AppSettings()
             settings_error = str(exc)
         root.title("Canon CHDK Webcam · Experimental")
-        root.geometry(f"{min(1080, root.winfo_screenwidth() - 60)}x{min(760, root.winfo_screenheight() - 110)}")
-        root.minsize(900, 660)
+        root.geometry(f"{min(1080, root.winfo_screenwidth() - 60)}x{min(760, root.winfo_screenheight() - 180)}")
+        root.minsize(800, 540)
         root.configure(bg="#10151e")
         self._style()
         self._build()
@@ -81,6 +81,8 @@ class WebcamApp:
             -1 if event.delta > 0 else 1, "units"))
         preview = ttk.Frame(body)
         preview.grid(row=0, column=1, sticky="nsew")
+        preview.columnconfigure(0, weight=1)
+        preview.rowconfigure(1, weight=1)
         self.variables = {}
         self.editable = []
         self.source = tk.StringVar(value="Simulation (synthetic frames)" if self.settings.mode == "simulate"
@@ -138,17 +140,22 @@ class WebcamApp:
         self.stop_button = ttk.Button(actions, text="Stop & disconnect", command=self._stop, state="disabled")
         self.stop_button.pack(fill="x")
         self.status = tk.StringVar(value="Disconnected")
-        ttk.Label(preview, textvariable=self.status, font=("Segoe UI", 14, "bold")).pack(anchor="w", pady=(0, 8))
+        ttk.Label(preview, textvariable=self.status, font=("Segoe UI", 14, "bold")).grid(row=0, column=0, sticky="w", pady=(0, 8))
         self.canvas = tk.Canvas(preview, bg="#090d14", highlightthickness=1,
                                 highlightbackground="#344154", width=640, height=360)
-        self.canvas.pack(fill="both", expand=True)
+        self.canvas.grid(row=1, column=0, sticky="nsew")
         self.canvas.create_text(300, 170, text="Start capture to preview\nSimulation is available without a camera",
                                 fill="#a7b4c9", font=("Segoe UI", 13), justify="center", tags="idle")
-        ttk.Label(preview, text="Output scaling does not add detail. Native 1080p extraction remains research.\n"
+        hint = ttk.Label(preview, text="Output scaling does not add detail. Native 1080p extraction remains research.\n"
                   "Clean viewport excludes CHDK bitmap overlays; camera-specific overlays need hardware checks.",
-                  style="Muted.TLabel", wraplength=650).pack(anchor="w", pady=10)
+                  style="Muted.TLabel", wraplength=650)
+        hint.grid(row=2, column=0, sticky="w", pady=10)
         self.stats = tk.StringVar(value="Source: —    Output: —    FPS: —")
-        ttk.Label(preview, textvariable=self.stats, justify="left", style="Muted.TLabel").pack(anchor="w")
+        statistics = ttk.Label(preview, textvariable=self.stats, justify="left", style="Muted.TLabel", wraplength=600)
+        statistics.grid(row=3, column=0, sticky="w")
+        preview.bind("<Configure>", lambda event: (
+            hint.configure(wraplength=max(200, event.width)),
+            statistics.configure(wraplength=max(200, event.width))))
         self.notice = tk.StringVar(value="No physical camera compatibility has been verified. OBS virtual camera must be installed.")
         ttk.Label(outer, textvariable=self.notice, wraplength=1000, foreground="#edc98a").pack(fill="x", pady=(12, 0))
 
